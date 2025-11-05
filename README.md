@@ -1,6 +1,6 @@
 # Finance Agent Tutorial
 
-The tutorial demonstrates tool calling with LLMs through a finance agent powered by Claude AI. You'll see how to implement an agentic loop that lets Claude dynamically invoke tools, run multiple actions in parallel for efficiency, and return structured JSON responses.
+The tutorial demonstrates tool calling with LLMs through a finance agent powered by Claude AI. It runs an agentic loop that lets Claude dynamically invoke tools and run multiple actions in parallel.
 
 ## Prerequisites
 
@@ -11,11 +11,6 @@ The tutorial demonstrates tool calling with LLMs through a finance agent powered
 
 1. Install required dependencies:
 
-```bash
-pip install -r requirements.txt
-```
-
-Or install individually:
 ```bash
 pip install anthropic python-dotenv
 ```
@@ -41,7 +36,7 @@ Run the agent by executing the Python script:
 python agent.py
 ```
 
-By default, it runs all test prompts. To run an individual prompt, invoke the `finance_agent(<prompt>)` with the desired prompt at the bottom of `agent.py`.
+By default, the agent runs a series of test prompts. To run an individual prompt, invoke the `finance_agent(<prompt>)` at the bottom of `agent.py`.
 
 ## What the agent can do
 
@@ -103,6 +98,8 @@ The loop follows these steps:
 5. Claude processes results and either:
    - Makes more tool calls (loop continues)
    - Provides final answer (loop ends)
+
+![Finance Agent loop: Claude decides whether to respond directly or call tools (calculate_portfolio_value, calculate), executes all tool calls in parallel, and iterates until a final answer.](./agent_loop.png)
 
 This approach allows Claude to handle multi-step problems that require gathering information, performing calculations, and combining results.
 
@@ -169,7 +166,6 @@ The agent consists of these components:
 - **API helper**: `call_claude()` function wrapping the Anthropic API
 - **Response handling**: Extracts raw text from Claude's final response
 
-### Architecture diagram
 
 ## Next steps
 
