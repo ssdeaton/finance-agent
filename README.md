@@ -2,6 +2,10 @@
 
 The tutorial demonstrates tool calling with LLMs through a finance agent powered by Claude AI. It runs an agentic loop that lets Claude dynamically invoke tools and run multiple actions in parallel.
 
+Follow the steps below to set up and run the agent or learn more about [how it works](#how-it-works) and [tool design best practices](#tool-design-best-practices).
+
+See [design decisions and tradeoffs](#design-decisions-and-tradeoffs) for discussion around implementation decisions.
+
 ## Prerequisites
 
 - Python 3.10 or higher
@@ -75,8 +79,8 @@ The agent uses an agentic loop pattern to handle multi-turn conversations with C
 
 The loop follows these steps:
 
-1. Send user prompt to Claude with available tools
-2. Claude decides which tools to use (if any)
+1. Send the user's query to Claude along with a list of available tools
+2. Claude decides which tools to use, if any
 3. Execute the requested tools
 4. Return results to Claude
 5. Claude processes results and either:
@@ -150,9 +154,9 @@ If you encounter issues with missing packages or authentication, refer to the Se
 
 ## Using beta tools (alternative implementation)
 
-Anthropic provides beta features that simplify tool implementation: the `@beta_tool` decorator and `tool_runner()` method. The tool runner provides an out-of-the-box solution for executing tools with Claude, automatically handling tool execution, request/response cycles, and conversation state management.
+Anthropic provides the `@beta_tool` decorator and `tool_runner()` method to simplify tool execution.
 
-The `@beta_tool` decorator automatically generates tool specifications from your function signatures and docstrings. This eliminates the need to manually create JSON schema dictionaries for each tool.
+The `@beta_tool` decorator automatically generates tool specifications from your function signatures and docstrings, so you don't need to manually create JSON schema dictionaries for each tool.
 
 The `tool_runner()` automatically:
 - Executes tools when Claude calls them
@@ -161,7 +165,7 @@ The `tool_runner()` automatically:
 - Provides type safety and validation
 - Handles errors automatically
 
-The tool runner returns an iterator that yields messages until the conversation completes (no more tool calls remain). This eliminates the need for manual `while` loops and message management.
+The tool runner returns an iterator that yields messages until the conversation completes, removing the need for manual `while` loops and message management.
 
 ### Comparing approaches
 
@@ -181,7 +185,9 @@ The tool runner returns an iterator that yields messages until the conversation 
 - Use manual implementation when you need fine-grained control over the agent loop, want to understand the underlying mechanics, or need custom error handling beyond what the tool runner provides
 - Use beta tools (tool runner) when you want to build quickly with less code, need automatic error handling, or want type safety and validation built-in
 
-See `agent_with_tool_runner.py` for a complete example using beta tools. The functionality is the same as in `agent.py`, but with less code. For more details, see the [official tool runner documentation](https://docs.claude.com/en/docs/agents-and-tools/tool-use/implement-tool-use#tool-runner-beta).
+See [`agent_with_tool_runner.py`](./agent_with_tool_runner.py) for a complete example using beta tools. The functionality is the same as in `agent.py`.
+
+For more details, see the [official tool runner documentation](https://docs.claude.com/en/docs/agents-and-tools/tool-use/implement-tool-use#tool-runner-beta).
 
 ## Next steps
 
@@ -203,3 +209,75 @@ To learn more about building agents with Claude and best practices for tool use:
 
 ### Tool use documentation
 - [**Implement Tool Use**](https://docs.claude.com/en/docs/agents-and-tools/tool-use/implement-tool-use) - Official Claude documentation on implementing tool use with the API
+
+## Design decisions and tradeoffs
+
+This section documents key architectural choices made during development, the alternatives considered, and the reasoning behind each decision.
+
+### Output format: Raw text over JSON mode
+
+**Decision**: Use raw text output instead of structured JSON responses.
+
+**Why**: During development, Claude occasionally produced malformed JSON with literal newlines inside string values (e.g., `{"result": "I can help...\n1. Look up..."}`), which broke `json.loads()`. I tried several approaches:
+1. JSON parsing with regex-based repair logic (too fragile)
+2. Response prefilling with `{"result": ` to force structure (still had edge cases)
+3. Raw text output with clear system prompt instructions (simple and reliable)
+
+**Tradeoff**: Raw text is harder to parse programmatically but more reliable for this tutorial's scope. For production systems needing machine-readable output, the "Next steps" section recommends JSON schema or prefilling techniques.
+
+### Combined portfolio tool design
+
+**Decision**: Single `calculate_portfolio_value()` tool that handles multiple stocks instead of separate `get_stock_price()` and `calculate_portfolio()` functions.
+
+**Why**: The baseline implementation required Claude to make N separate `get_stock_price()` calls for N stocks, then multiple calculation calls, resulting in 9+ turns for a 3-stock portfolio. Combining these into one tool reduced this to 2 turns (78% improvement).
+
+**Tradeoff**: More complex tool implementation (~30 lines vs ~10 lines for single stock lookup) and less granular separation of concerns. However, the turn reduction justified the added complexity for this common use case.
+
+### Self-describing tool results
+
+**Decision**: Tools return structured JSON with context (e.g., `{"operation": "*", "a": 173, "b": 3232, "result": 559136}`) instead of just the computed value.
+
+**Why**: When Claude makes multiple parallel tool calls, it needs to track which result corresponds to which operation. Self-describing results eliminate ambiguity about what each number represents.
+
+**Tradeoff**: Slightly larger tool results (more tokens), but the clarity benefit outweighs the minimal token cost.
+
+### Error handling approach
+
+**Decision**: Two-level error handling: tool functions raise standard Python exceptions, agent loop catches them and formats as JSON errors for Claude.
+
+**Why**: This separates validation logic (in tools) from error communication (in agent loop), making tools reusable and keeping error handling consistent.
+
+**Error handling covers**:
+- Invalid tickers (KeyError)
+- Division by zero (ZeroDivisionError)
+- Invalid mathematical operations (ValueError)
+- Malformed inputs (caught at tool execution level)
+
+**Tradeoff**: Exceptions propagate through the stack before being caught, which could make debugging harder. However, the clear separation of concerns and standard Python error patterns made this the right choice for tutorial clarity.
+
+### Temperature setting
+
+**Decision**: Keep using `temperature=0.0` throughout.
+
+**Why**: Deterministic output makes the tutorial reproducible and easier to understand. Users see consistent behavior when running the same queries.
+
+**Tradeoff**: Less creative responses, but creativity isn't needed for mathematical and financial queries where accuracy matters more.
+
+### Expression evaluator implementation
+
+**Decision**: Use Python's `ast` module with explicit allowlisting instead of `eval()` or an external expression library.
+
+**Why**:
+- Security: `eval()` poses code injection risks
+- Educational value: Shows how to safely parse expressions without third-party dependencies
+- Control: Explicit whitelist makes it clear exactly what operations are allowed
+
+**Tradeoff**: More complex implementation (~50 lines) and limited to operations we explicitly whitelist. However, this approach demonstrates production-ready security practices and gives full control over supported operations.
+
+### Architecture: Manual loop vs tool runner
+
+**Decision**: Provide both manual implementation (`agent.py`) and beta tool runner implementation (`agent_with_tool_runner.py`).
+
+**Why**: The manual implementation teaches how tool use works under the hood, while the tool runner shows the faster production approach. Offering both helps users understand the concepts before using the abstraction.
+
+**Tradeoff**: More code to maintain, but the educational benefit justified having both examples.
