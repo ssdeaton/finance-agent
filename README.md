@@ -91,18 +91,26 @@ This approach allows Claude to handle multi-step problems that require gathering
 
 The agent handles multiple tool calls in a single response. When Claude requests multiple tools simultaneously, the agent extracts all tool calls, executes them, and returns all results in a single user message. This follows the [Claude documentation on multiple tool calls](https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview#multiple-tool-example) and reduces the number of API turns needed.
 
-### Specific tool calling configurations
+### Tool design best practices
 
-The implementation uses two specific mechanisms for accurate tool calling:
+The implementation follows several best practices for reliable tool use:
 
-1. **System prompt** explicitly instructs Claude to return only numbers for stock or math questions:
+1. **Self-describing tool results**: Tools return structured JSON with context, not just raw values. For example, `calculate()` returns `{"operation": "*", "a": 173, "b": 3232, "result": 559136}` instead of just `559136`. This helps Claude understand what each result represents when processing multiple tool calls.
+
+2. **Clear parameter naming**: Tool parameters use descriptive names that match their purpose. For `calculate()`, parameters are named `op` (operation), `a` (first operand), and `b` (second operand) with detailed descriptions explaining their role in different operations (e.g., "For '**': base" vs "For '**': exponent").
+
+3. **Explicit tool descriptions**: Tool descriptions explain exactly when to use each tool and provide examples. The `calculate_portfolio_value` description explicitly states "For a single stock, use quantity=1" to guide Claude's tool selection.
+
+4. **Constrained output format**: The system prompt explicitly instructs Claude to return only the final answer:
    ```
    After using tools, provide ONLY the final answer value with no additional text, formatting, or explanation.
    - For numerical answers (stock prices, calculations): output just the number (e.g., 245.60)
    - For conversational questions: output a brief text response
    ```
 
-2. **Temperature=0.0** ensures deterministic, consistent output by removing randomness from Claude's responses
+5. **Temperature=0.0**: Ensures deterministic, consistent output by removing randomness from Claude's responses
+
+These patterns reduce ambiguity and help Claude use tools correctly even in complex multi-step scenarios.
 
 ## Optimization tutorial
 
@@ -124,15 +132,14 @@ See the notebook for interactive examples, detailed comparisons, and the safe AS
 
 ### How to run the tutorial
 
-To experiment with these optimizations yourself, follow the [prerequisites](#prerequisites) and [installation](#installation) steps for this repository.
-
-Install the additional required [jupyter](https://pypi.org/project/jupyter/) dependency.
+To experiment with these optimizations yourself:
+1. Follow the [prerequisites](#prerequisites) and [installation](#installation) steps for this repository.
+2. Install the additional required [jupyter](https://pypi.org/project/jupyter/) dependency.
 
    ```
    pip install jupyterlab anthropic python-dotenv
    ```
-
-Then, launch the tutorial notebook in Jupyter:
+3. Launch the tutorial notebook in Jupyter:
    ```
    jupyter lab optimization_tutorial.ipynb
    ```
