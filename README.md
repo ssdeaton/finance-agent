@@ -46,22 +46,6 @@ The finance agent provides two main capabilities: [stock price lookups](#stock-p
 
 The agent uses the `calculate_portfolio_value` tool with a quantity of 1 to retrieve single stock prices, or to calculate the cost of multiple stocks. Stock prices are hardcoded, but you can extend the functionality with realtime stock APIs.
 
-Available tickers:
-
-- `aapl` - Apple
-- `msft` - Microsoft
-- `nvda` - NVIDIA
-- `goog`/`googl` - Alphabet (Google)
-- `amzn` - Amazon
-- `meta` - Meta (Facebook)
-- `tsla` - Tesla
-
-**How to add more tickers:**  
-To support additional stocks, just add them to the `STOCK_PRICES` dictionary at the top of `agent.py` and `agent_with_tool_runner.py` in this format:
-```python
-"NEW_TICKER": {"price": 123.45, "name": "Company Name"},
-```
-
 ### Mathematical calculations
 
 The agent performs calculations using the `calculate` tool. This ensures accurate results without relying on Claude's internal math capabilities.
@@ -107,19 +91,55 @@ This approach allows Claude to handle multi-step problems that require gathering
 
 The agent handles multiple tool calls in a single response. When Claude requests multiple tools simultaneously, the agent extracts all tool calls, executes them, and returns all results in a single user message. This follows the [Claude documentation on multiple tool calls](https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview#multiple-tool-example) and reduces the number of API turns needed.
 
-### Tool calling configurations
+### Specific tool calling configurations
 
-The implementation uses three mechanisms:
+The implementation uses two specific mechanisms for accurate tool calling:
 
-1. **System prompt** explicitly instructs Claude to return JSON-only format:
+1. **System prompt** explicitly instructs Claude to return only numbers for stock or math questions:
    ```
-   CRITICAL: Your final response MUST be ONLY valid JSON with no additional text before or after
-   Use this exact format: {"result": <number or string>, "explanation": "<brief optional explanation>"}
+   After using tools, provide ONLY the final answer value with no additional text, formatting, or explanation.
+   - For numerical answers (stock prices, calculations): output just the number (e.g., 245.60)
+   - For conversational questions: output a brief text response
    ```
 
 2. **Temperature=0.0** ensures deterministic, consistent output by removing randomness from Claude's responses
 
-3. **JSON parser with fallback** handles edge cases if extra text appears, extracting JSON from the response text
+## Optimization tutorial
+
+The [`optimization_tutorial.ipynb` notebook](./optimization_tutorial.ipynb) demonstrates how design decisions impact API turn counts. It walks through four progressive optimizations:
+
+1. **Baseline**: Separate tools for stock price lookup and calculation
+2. **Combined portfolio tool**: Handles multiple stocks in one call
+3. **Optimized system prompt**: Encourages parallel tool calls for independent operations
+4. **Expression evaluator**: Safe AST-based math expression evaluation in one call
+
+**Takeaways**:
+- Combined tools significantly reduce turns for common use cases
+- System prompt optimization encourages parallel execution when operations are independent
+- Expression evaluators eliminate multi-step operations for math-heavy applications
+- Not all queries benefit equally; focus optimization on your most frequent use cases
+- Always measure turn counts to justify engineering effort
+
+See the notebook for interactive examples, detailed comparisons, and the safe AST-based expression evaluator implementation.
+
+### How to run the tutorial
+
+To experiment with these optimizations yourself, follow the [prerequisites](#prerequisites) and [installation](#installation) steps for this repository.
+
+Install the additional required [jupyter](https://pypi.org/project/jupyter/) dependency.
+
+   ```
+   pip install jupyterlab anthropic python-dotenv
+   ```
+
+Then, launch the tutorial notebook in Jupyter:
+   ```
+   jupyter lab optimization_tutorial.ipynb
+   ```
+
+Follow the instructions in the notebook cells. You can run each cell to observe API turn counts for various prompts and see the effect of each optimization step interactively.
+
+If you encounter issues with missing packages or authentication, refer to the Setup section within the notebook for troubleshooting tips.
 
 ## Using beta tools (alternative implementation)
 
@@ -156,23 +176,12 @@ The tool runner returns an iterator that yields messages until the conversation 
 
 See `agent_with_tool_runner.py` for a complete example using beta tools. The functionality is the same as in `agent.py`, but with less code. For more details, see the [official tool runner documentation](https://docs.claude.com/en/docs/agents-and-tools/tool-use/implement-tool-use#tool-runner-beta).
 
-## Architecture
-
-The agent consists of these components:
-
-- **Tools**: `calculate_portfolio_value()` (handles single stocks with quantity=1) and `calculate()` functions
-- **Tool specifications**: JSON schemas describing each tool's interface
-- **Agent loop**: `finance_agent()` function managing the conversation flow
-- **API helper**: `call_claude()` function wrapping the Anthropic API
-- **Response handling**: Extracts raw text from Claude's final response
-
-
 ## Next steps
 
 To extend the agent further, consider:
 
-1. **Structured JSON output**: Add JSON mode for downstream system integration. The current implementation uses raw text output for simplicity and reliability. For production systems that need machine-parseable output, consider using Claude's response prefilling technique or the new JSON schema feature to enforce structured responses. See the [output consistency documentation](https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/increase-consistency) for implementation patterns.
-2. **Optimization**: Reduce the number of API calls by encouraging parallel tool use
+1. **Structured JSON output**: Add JSON mode for downstream system integration. The current implementation uses raw text output. For production systems that need machine-parseable output, consider using Claude's response prefilling technique or the JSON schema feature to enforce structured responses. See the [output consistency documentation](https://docs.claude.com/en/docs/test-and-evaluate/strengthen-guardrails/increase-consistency) for implementation patterns.
+2. **Optimization**: Reduce the number of API calls by encouraging parallel tool use and combining mathematical tool calls into a single expression evaluator
 3. **Streaming**: Add response streaming for better user experience if designing for a conversational flow
 4. **Real-time data**: Integrate with live stock price APIs
 5. **Extended math**: Support more complex operations (trig functions, etc.)
@@ -187,10 +196,3 @@ To learn more about building agents with Claude and best practices for tool use:
 
 ### Tool use documentation
 - [**Implement Tool Use**](https://docs.claude.com/en/docs/agents-and-tools/tool-use/implement-tool-use) - Official Claude documentation on implementing tool use with the API
-
-These resources provide deeper insights into:
-- How to write clear tool descriptions
-- Strategies for reducing API turns
-- Error handling patterns
-- Testing and debugging agents
-- Production deployment considerations
