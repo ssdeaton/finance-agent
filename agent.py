@@ -73,13 +73,12 @@ Example: For "173 * 3232 + 342 / 72.1", both the multiplication and division can
 When answering questions:
 - For single stock price queries, use calculate_portfolio_value with [{"ticker": "XXX", "quantity": 1}]
 - For portfolio questions (e.g., "buy 15 shares of tesla and 24 shares of google"), use calculate_portfolio_value with ALL stocks in a single call
-- CRITICAL: Your final response MUST be ONLY valid JSON with no additional text before or after
-- Use this exact format:
-{"result": <number or string>, "explanation": "<brief optional explanation>"}
 
-For numerical answers (stock prices, calculations), put just the number in "result".
-For conversational questions (like asking about capabilities), put a text response in "result".
-Do not include any commentary, just the JSON object."""
+IMPORTANT - Final Response Format:
+After using tools, provide ONLY the final answer value with no additional text, formatting, or explanation.
+- For numerical answers (stock prices, calculations): output just the number (e.g., 245.60)
+- For conversational questions: output a brief text response
+Do not include any JSON, markdown, or other formatting. Just the raw result."""
 
 
 # =============================================================================
@@ -241,37 +240,6 @@ calculate_spec = {
 # =============================================================================
 
 
-def parse_json_response(text: str) -> Dict[str, Any]:
-    """
-    Parse JSON from Claude's response.
-    
-    With proper prompting (system prompt specifies JSON format), Claude should
-    return pure JSON. This function handles JSON parsing with a fallback if the response is not pure JSON.
-
-    Args:
-        text: The response text that should contain JSON
-
-    Returns:
-        Parsed JSON dictionary
-
-    Raises:
-        json.JSONDecodeError: If no valid JSON found
-    """
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        # Fallback: try to find and parse JSON object if there's extra text
-        start_idx = text.find("{")
-        end_idx = text.rfind("}")
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            try:
-                return json.loads(text[start_idx : end_idx + 1])
-            except json.JSONDecodeError:
-                pass
-        raise json.JSONDecodeError("No valid JSON found in response", text, 0)
-
-
 def call_claude(messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None):
     """
     Call Claude API with tool use support.
@@ -369,14 +337,8 @@ def finance_agent(prompt: str) -> None:
                 if getattr(block, "type", None) == "text"
             ])
 
-            # Parse JSON response (system prompt ensures JSON format)
-            try:
-                result_json = parse_json_response(final_answer)
-                print(result_json.get("result"))
-            except json.JSONDecodeError:
-                # Fallback: print raw response if JSON parsing fails
-                print(final_answer)
-
+            # Print the raw result (no JSON parsing needed)
+            print(final_answer.strip())
             return
 
         # Execute all tool calls and collect results
