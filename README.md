@@ -281,3 +281,37 @@ This section documents key architectural choices made during development, the al
 **Why**: The manual implementation teaches how tool use works under the hood, while the tool runner shows the faster production approach. Offering both helps users understand the concepts before using the abstraction.
 
 **Tradeoff**: More code to maintain, but the educational benefit justified having both examples.
+
+### No MCP (Model Context Protocol)
+
+**Decision**: Implement tools as direct Python functions rather than using MCP servers.
+
+**Why**:
+- Simpler setup for tutorial purposes with no separate server/decorators/libraries to manage
+- Reduces dependencies and complexity for learners
+- Our use case (stock lookups + math) doesn't need intelligent orchestration across diverse tool types
+   - MCP shines when the agent needs to discover and coordinate between many heterogeneous tools (databases, file systems, APIs, search engines, etc.)
+
+**Tradeoff**: In production, MCP would be beneficial for:
+- Tools that connect to databases, APIs, or external services
+- Sharing or standardizing tools across multiple agents or applications
+- Agents that need to intelligently orchestrate across many different tool types and services
+
+For this tutorial's scope (two related tools with hardcoded data), direct Python functions are more appropriate and easier to understand. MCP's power comes from managing complexity at scale.
+
+### No explicit planning phase
+
+**Decision**: Let Claude directly use tools without a separate planning step.
+
+**Why**:
+- For basic financial and math queries, planning overhead isn't necessary and Claude's native reasoning is sufficient to break down these problems
+- Reduces API turns and latency
+- The system prompt's parallel execution hint provides enough guidance
+
+**When planning would help**:
+- Complex multi-step workflows with dependencies
+- Tasks requiring resource allocation or constraint satisfaction
+- Scenarios where the agent needs to verify feasibility before execution
+- Operations with irreversible side effects (file deletion, API calls with rate limits)
+
+For stock price lookups and calculations, the complexity doesn't justify the additional turns and latency that a planning phase would introduce.
